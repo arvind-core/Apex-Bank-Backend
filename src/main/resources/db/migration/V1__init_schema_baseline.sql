@@ -1,0 +1,1 @@
+COMMENT ON SCHEMA Public IS 'Apex Bank V1 operational and financial schema';

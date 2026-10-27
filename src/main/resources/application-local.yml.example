@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/apexbank
+    username: apexbank
+    password: apexbank_local_password
+  jpa:
+    show-sql: false
