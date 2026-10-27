@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: apex-bank-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: apexbank
+      POSTGRES_USER: apexbank
+      POSTGRES_PASSWORD: apexbank_local_password
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - apex_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U apexbank -d apexbank"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  apex_postgres_data:
