@@ -30,6 +30,10 @@ management:
         enabled: true
       show-details: never
 
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-}]"
+
 apexbank:
   business-time-zone: Asia/Kolkata
   default-currency: INR
