@@ -10,6 +10,8 @@ import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -79,6 +81,42 @@ public class GlobalExceptionHandler {
                 traceId
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiErrorResponse> handleAuthenticationException(
+            AuthenticationException ex,
+            HttpServletRequest request
+    ) {
+        String traceId = resolveTraceId(request);
+        log.warn("Authentication failed [path={}, traceId={}]", request.getRequestURI(), traceId);
+
+        ApiErrorResponse body = new ApiErrorResponse(
+                "AUTHENTICATION_REQUIRED",
+                "Authentication is required to access this resource.",
+                null,
+                List.of(),
+                traceId
+        );
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDeniedException(
+            AccessDeniedException ex,
+            HttpServletRequest request
+    ) {
+        String traceId = resolveTraceId(request);
+        log.warn("Access denied [path={}, traceId={}]", request.getRequestURI(), traceId);
+
+        ApiErrorResponse body = new ApiErrorResponse(
+                "ACCESS_DENIED",
+                "You do not have permission to perform this operation.",
+                null,
+                List.of(),
+                traceId
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     @ExceptionHandler(Exception.class)
