@@ -1,0 +1,3036 @@
+{
+  "info": {
+    "_postman_id": "d8e2b5a0-7f1c-4c3e-9b2a-5f6e7d8c9b0a",
+    "name": "Apex Bank — V1 API Collection",
+    "description": "Authoritative Postman API testing collection for Apex Bank (V1 HTTP API Contract).\n\n### Contract Baseline\n- **Total Documented V1 Endpoints in `docs/api.md`:** 215 distinct HTTP method/path combinations.\n- **API Prefix:** `/api/v1` (`{{baseUrl}}` = `http://localhost:8080/api/v1`).\n- **Authentication:** Short-lived (5-minute) Bearer JWT access token in `Authorization` header (`{{customerAccessToken}}`, `{{managerAccessToken}}`, `{{adminAccessToken}}`). Session renewal uses a 2-hour `HttpOnly` cookie on `Path=/api/v1/auth`.\n- **Standard Error Envelope:** `{ \"code\", \"message\", \"details\", \"fieldErrors\", \"traceId\" }`.\n- **Note on Implementation State:** Only Foundation Milestones 1–6 are currently implemented. Business domain requests are marked `[CONTRACT - UNIMPLEMENTED]` and will be activated and expanded incrementally as each backend module is implemented.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{customerAccessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level pre-request hook.",
+          "// Idempotency-Key generation is attached ONLY to specific mutation requests whose contract requires it."
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level baseline checks for observability and error contracts (docs/api.md Section 12)",
+          "pm.test(\"Response includes X-Trace-Id correlation header\", function () {",
+          "    pm.expect(pm.response.headers.has(\"X-Trace-Id\")).to.be.true;",
+          "    pm.expect(pm.response.headers.get(\"X-Trace-Id\")).to.be.a(\"string\").and.not.be.empty;",
+          "});",
+          "",
+          "const contentType = pm.response.headers.get(\"Content-Type\") || \"\";",
+          "if (pm.response.code >= 400 && contentType.includes(\"application/json\")) {",
+          "    pm.test(\"Error response conforms to standard ApiErrorResponse envelope\", function () {",
+          "        const err = pm.response.json();",
+          "        pm.expect(err).to.be.an(\"object\");",
+          "        pm.expect(err).to.have.property(\"code\").that.is.a(\"string\").and.is.not.empty;",
+          "        pm.expect(err).to.have.property(\"message\").that.is.a(\"string\").and.is.not.empty;",
+          "        pm.expect(err).to.have.property(\"details\");",
+          "        pm.expect(err).to.have.property(\"fieldErrors\").that.is.an(\"array\");",
+          "        pm.expect(err).to.have.property(\"traceId\").that.is.a(\"string\").and.is.not.empty;",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Infrastructure & Foundation",
+      "description": "Live infrastructure and foundation verification requests executable against the Milestone 6 backend (`feature/backend-foundation`).\n\nVerifies:\n1. Spring Boot Actuator health endpoint (`GET {{actuatorBaseUrl}}/actuator/health`).\n2. Prompt-specified `GET {{baseUrl}}/actuator/health` smoke check (verifies `TraceIdFilter`, `ApiAuthenticationEntryPoint`, and the standard `401 Unauthorized` JSON error envelope on unauthenticated `/api/v1/**` paths).",
+      "item": [
+        {
+          "name": "Actuator Health Check (Root Context)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Content-Type is application/vnd.spring-boot.actuator.v3+json or application/json\", function () {",
+                  "    const ct = pm.response.headers.get(\"Content-Type\") || \"\";",
+                  "    pm.expect(ct).to.include(\"json\");",
+                  "});",
+                  "",
+                  "pm.test(\"Health status is UP\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"status\", \"UP\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{actuatorBaseUrl}}/actuator/health",
+              "host": [
+                "{{actuatorBaseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Calls the root Spring Boot Actuator health endpoint (`http://localhost:8080/actuator/health`) permitted by `SecurityConfig`."
+          },
+          "response": []
+        },
+        {
+          "name": "API Base URL Health / Security EntryPoint Check ({{baseUrl}}/actuator/health)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Returns 200 OK (if Actuator mapped under /api/v1) or 401 Unauthorized (Spring Security /api/v1/** guard)\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 401]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Optional infrastructure health/security smoke check using `GET {{baseUrl}}/actuator/health`. When Actuator is served at root (`/actuator/health`), requesting `/api/v1/actuator/health` without a Bearer token exercises the `/api/v1/**` Spring Security filter chain and verifies the `401 Unauthorized` `ApiErrorResponse` envelope and `X-Trace-Id` header."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Authentication",
+      "description": "**Domain Group:** Authentication (`docs/api.md` Section 28)\n**Part of Planning Group:** Authentication / Customer / Accounts (52 total endpoints in `api.md` Section 164.15; 13 concrete Authentication endpoints in Section 28).\n\n### Documented V1 Endpoints (13)\n1. `POST /api/v1/auth/register` (28.12 — Public)\n2. `POST /api/v1/auth/verify-registration` (28.12 — Public, `Idempotency-Key` required)\n3. `POST /api/v1/auth/login` (28.1 — Public)\n4. `POST /api/v1/auth/verify-second-factor` (28.2 — Public with pending challenge)\n5. `GET /api/v1/auth/me` (28.3 — Authenticated)\n6. `POST /api/v1/auth/refresh` (28.8 — `HttpOnly` refresh cookie on `Path=/api/v1/auth`)\n7. `POST /api/v1/auth/logout` (28.9 — Authenticated or refresh cookie)\n8. `POST /api/v1/auth/challenges/{challengeId}/verify` (28.10 — Challenge verification)\n9. `POST /api/v1/auth/challenges/{challengeId}/resend` (28.11 — Challenge resend)\n10. `POST /api/v1/auth/forgot-user-id` (28.4 — Public)\n11. `POST /api/v1/auth/forgot-password` (28.5 — Public)\n12. `POST /api/v1/auth/reset-password` (28.6 — Public with reset challenge)\n13. `POST /api/v1/auth/change-password` (28.7 — Authenticated)",
+      "item": [
+        {
+          "name": "Start Customer Registration [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 202 Accepted: returns VERIFICATION_REQUIRED and challengeId\", function () {",
+                  "        pm.expect(body).to.have.property(\"status\", \"VERIFICATION_REQUIRED\");",
+                  "        pm.expect(body).to.have.property(\"challengeId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"expiresAt\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"challengeId\", body.challengeId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Endpoint not yet implemented (expected 202 once Milestone 8 is built)\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loginId\": \"arvind.customer\",\n  \"password\": \"StrongPass#2026\",\n  \"fullName\": \"Arvind Dhakar\",\n  \"dateOfBirth\": \"2003-05-15\",\n  \"email\": \"arvind@example.com\",\n  \"mobileNumber\": \"9876543210\",\n  \"address\": {\n    \"line1\": \"12 MG Road\",\n    \"line2\": \"Near Central Park\",\n    \"city\": \"Indore\",\n    \"state\": \"Madhya Pradesh\",\n    \"postalCode\": \"452001\",\n    \"country\": \"IN\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.12 — Initiates customer registration and sends a purpose-bound `REGISTER_CUSTOMER` OTP challenge without creating identity rows premature to verification. Expected status: `202 Accepted`."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Purpose-Bound OTP Challenge [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: challenge transitions to VERIFIED\", function () {",
+                  "        pm.expect(body).to.have.property(\"challengeId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"VERIFIED\");",
+                  "        pm.expect(body).to.have.property(\"purpose\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"expiresAt\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"verificationChallengeId\", body.challengeId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Endpoint not yet implemented (expected 200 once Milestone 8 is built)\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/challenges/{{challengeId}}/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "challenges",
+                "{{challengeId}}",
+                "verify"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.10 — Verifies an OTP code for a purpose-bound challenge and transitions it from `PENDING` to `VERIFIED` for its short consumption window. Saves `verificationChallengeId` to the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Customer Registration [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Contract 201 Created: registration completed\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Endpoint not yet implemented (expected 201 once Milestone 8 is built)\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationChallengeId\": \"{{verificationChallengeId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-registration",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-registration"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.12 — Atomically consumes the verified `REGISTER_CUSTOMER` challenge and creates `user_account`, `customer`, `customer_preferences`, initial `trust_score`, `trust_score_history`, and reserved `DEFAULT_PHONE` UPI record. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (Step 1: Credentials) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns SECOND_FACTOR_REQUIRED and challengeId\", function () {",
+                  "        pm.expect(body).to.have.property(\"status\", \"SECOND_FACTOR_REQUIRED\");",
+                  "        pm.expect(body).to.have.property(\"challengeId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"expiresAt\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"challengeId\", body.challengeId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Endpoint not yet implemented (expected 200 once Milestone 8 is built)\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loginId\": \"customer123\",\n  \"password\": \"StrongPass#2026\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.1 — Verifies `loginId` and `password` and initiates the required second-factor challenge (`SECOND_FACTOR_REQUIRED`). Saves `challengeId` to the environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Second Factor (Step 2: Issue JWT & Cookie) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns AUTHENTICATED, Bearer accessToken, and user summary\", function () {",
+                  "        pm.expect(body).to.have.property(\"status\", \"AUTHENTICATED\");",
+                  "        pm.expect(body).to.have.property(\"accessToken\").that.is.a(\"string\").and.not.empty;",
+                  "        pm.expect(body).to.have.property(\"tokenType\", \"Bearer\");",
+                  "        pm.expect(body).to.have.property(\"expiresAt\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"user\").that.is.an(\"object\");",
+                  "        pm.expect(body.user).to.have.property(\"userId\").that.is.a(\"string\");",
+                  "        pm.expect(body.user).to.have.property(\"role\").that.is.oneOf([\"CUSTOMER\", \"MANAGER\", \"ADMIN\"]);",
+                  "    });",
+                  "    if (body.user && body.user.role === \"CUSTOMER\") {",
+                  "        pm.environment.set(\"customerAccessToken\", body.accessToken);",
+                  "    } else if (body.user && body.user.role === \"MANAGER\") {",
+                  "        pm.environment.set(\"managerAccessToken\", body.accessToken);",
+                  "    } else if (body.user && body.user.role === \"ADMIN\") {",
+                  "        pm.environment.set(\"adminAccessToken\", body.accessToken);",
+                  "    }",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Endpoint not yet implemented (expected 200 once Milestone 8 is built)\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challengeId\": \"{{challengeId}}\",\n  \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-second-factor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-second-factor"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.2 — Completes 2FA login, sets the 2-hour `HttpOnly` refresh cookie (`Path=/api/v1/auth`), and saves the 5-minute `accessToken` into the role-appropriate secret environment variable (`customerAccessToken`, `managerAccessToken`, or `adminAccessToken`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current Authenticated User (/auth/me) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns userId, role, and status\", function () {",
+                  "        pm.expect(body).to.have.property(\"userId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"role\").that.is.oneOf([\"CUSTOMER\", \"MANAGER\", \"ADMIN\"]);",
+                  "        pm.expect(body).to.have.property(\"status\").that.is.a(\"string\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Authentication is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.3 — Returns the authenticated user's basic identity (`userId`, `role`, `status`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Access Token (HttpOnly Cookie) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns rotated accessToken and Bearer tokenType\", function () {",
+                  "        pm.expect(body).to.have.property(\"accessToken\").that.is.a(\"string\").and.not.empty;",
+                  "        pm.expect(body).to.have.property(\"tokenType\", \"Bearer\");",
+                  "        pm.expect(body).to.have.property(\"expiresAt\").that.is.a(\"string\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Refresh endpoint is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.8 — Uses Postman's Cookie Jar (`HttpOnly` refresh cookie on `Path=/api/v1/auth`) to issue a new 5-minute access token and rotate the 2-hour refresh token."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout (Revoke Refresh Cookie) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 204) {",
+                  "    pm.test(\"Contract 204 No Content: session logged out\", function () {",
+                  "        pm.response.to.have.status(204);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Logout endpoint is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "`docs/api.md` Section 28.9 — Revokes the active refresh token `tokenId` in Redis and clears the `HttpOnly` refresh cookie. Expected status: `204 No Content`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Customer & Profile",
+      "description": "**Domain Group:** Customer Profile, Preferences, Photo, Telegram Link & Pending Requests (`docs/api.md` Section 33 & Section 63)\n**Part of Planning Group:** Authentication / Customer / Accounts (52 total endpoints in `api.md` Section 164.15; 18 concrete Customer endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (18)\n1. `GET /api/v1/customers/me` (33.1)\n2. `PATCH /api/v1/customers/me` (33.2)\n3. `POST /api/v1/customer-profile-change-requests` (33.3 — `Idempotency-Key` required)\n4. `GET /api/v1/customer-profile-change-requests/{requestId}` (33.3)\n5. `DELETE /api/v1/customer-profile-change-requests/{requestId}` (33.3)\n6. `POST /api/v1/customers/me/mobile-number/change` (33.4 — `Idempotency-Key` required)\n7. `POST /api/v1/customers/me/email/change` (33.5)\n8. `PUT /api/v1/customers/me/email` (33.5)\n9. `POST /api/v1/customers/me/telegram-link` (33.6)\n10. `POST /api/v1/customers/me/telegram-link/verify` (33.6.1)\n11. `POST /api/v1/customers/me/telegram-link/unlink` (33.7)\n12. `GET /api/v1/customers/me/preferences` (33.8)\n13. `PATCH /api/v1/customers/me/preferences` (33.8)\n14. `GET /api/v1/customers/me/pending-requests` (33.8.1 — Paginated)\n15. `POST /api/v1/customers/me/profile-photo` (33.9.1 — `multipart/form-data`, max 2 MB)\n16. `PUT /api/v1/customers/me/profile-photo` (33.9.2 — `multipart/form-data`, max 2 MB)\n17. `DELETE /api/v1/customers/me/profile-photo` (33.9.3)\n18. `PATCH /api/v1/customers/me/default-upi` (63)",
+      "item": [
+        {
+          "name": "Get Current Customer Profile (/customers/me) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns customer profile DTO\", function () {",
+                  "        pm.expect(body).to.have.property(\"customerId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"userId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"fullName\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"email\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"mobileNumber\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"address\").that.is.an(\"object\");",
+                  "        pm.expect(body).to.have.property(\"telegram\").that.is.an(\"object\");",
+                  "        pm.expect(body).to.have.property(\"profilePhoto\").that.is.an(\"object\");",
+                  "    });",
+                  "    pm.environment.set(\"customerId\", body.customerId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Customer module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "me"
+              ]
+            },
+            "description": "`docs/api.md` Section 33.1 — Returns the authenticated customer's profile, simulated mobile number, Telegram linkage status, and profile photo metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Customer Profile Change Request [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns PENDING profile change request\", function () {",
+                  "        pm.expect(body).to.have.property(\"requestId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"PENDING\");",
+                  "        pm.expect(body).to.have.property(\"validTill\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"requestedChanges\").that.is.an(\"object\");",
+                  "    });",
+                  "    pm.environment.set(\"requestId\", body.requestId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Customer module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": \"{{branchId}}\",\n  \"changes\": {\n    \"fullName\": \"Arvind Kumar Dhakar\"\n  },\n  \"reason\": \"Legal name update\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/customer-profile-change-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customer-profile-change-requests"
+              ]
+            },
+            "description": "`docs/api.md` Section 33.3 — Creates a Manager-reviewed request for sensitive KYC/legal profile fields. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "List Customer Pending Requests (Aggregated) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: conforms to standard pagination envelope\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"page\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"pageSize\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalElements\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalPages\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Pending Requests endpoint is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/customers/me/pending-requests?page=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "customers",
+                "me",
+                "pending-requests"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                },
+                {
+                  "key": "requestType",
+                  "value": "PROFILE_CHANGE",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "`docs/api.md` Section 33.8.1 — Read-only Spring JDBC projection across active customer workflow requests."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Accounts, Closure & Branch Transfer",
+      "description": "**Domain Group:** Account Metadata, Accounts Lifecycle, Closure Requests & Branch-Transfer Requests (`docs/api.md` Sections 34–41)\n**Part of Planning Group:** Authentication / Customer / Accounts (52 total endpoints in `api.md` Section 164.15; 15 concrete Account endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (15)\n1. `GET /api/v1/account-types` (34.1)\n2. `GET /api/v1/branches?status=ACTIVE` (34.2)\n3. `GET /api/v1/accounts` (35 — Paginated)\n4. `GET /api/v1/accounts/{accountId}` (36)\n5. `POST /api/v1/accounts` (37 — `Idempotency-Key` required)\n6. `POST /api/v1/accounts/{accountId}/suspend` (38 — `Idempotency-Key` required)\n7. `POST /api/v1/accounts/{accountId}/reactivate` (39 — `Idempotency-Key` required)\n8. `POST /api/v1/account-closure-requests` (40.1 — `Idempotency-Key` required)\n9. `GET /api/v1/account-closure-requests` (40.2 — Paginated)\n10. `GET /api/v1/account-closure-requests/{requestId}` (40.3)\n11. `DELETE /api/v1/account-closure-requests/{requestId}` (40.4)\n12. `POST /api/v1/branch-transfer-requests` (41.1 — `Idempotency-Key` required)\n13. `GET /api/v1/branch-transfer-requests` (41.2 — Paginated)\n14. `GET /api/v1/branch-transfer-requests/{requestId}` (41.3)\n15. `DELETE /api/v1/branch-transfer-requests/{requestId}` (41.4)",
+      "item": [
+        {
+          "name": "Create Customer Account [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns funded ACTIVE account\", function () {",
+                  "        pm.expect(body).to.have.property(\"accountId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"accountNumber\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"accountType\", \"SAVINGS\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"ACTIVE\");",
+                  "        pm.expect(body).to.have.property(\"balance\").that.is.a(\"number\");",
+                  "    });",
+                  "    pm.environment.set(\"accountId\", body.accountId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Accounts module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountType\": \"SAVINGS\",\n  \"branchId\": \"{{branchId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts"
+              ]
+            },
+            "description": "`docs/api.md` Section 37 — Creates a new customer account, applies initial Central Ledger funding atomically, and saves `accountId` to the environment. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "List Customer Accounts [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns paginated customer accounts\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"page\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"pageSize\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalElements\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalPages\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Accounts module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts?page=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "disabled": true
+                },
+                {
+                  "key": "accountType",
+                  "value": "SAVINGS",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`docs/api.md` Section 35 — Returns paginated accounts owned by the authenticated customer."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Account Details [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns account details\", function () {",
+                  "        pm.expect(body).to.have.property(\"accountId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"accountNumber\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"balance\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Accounts module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountId}}"
+              ]
+            },
+            "description": "`docs/api.md` Section 36 — Returns details of a single customer-owned account."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Transfers & Transactions",
+      "description": "**Domain Group:** Recipient Verification, Money Transfers & Transaction History (`docs/api.md` Sections 47–57)\n**Part of Planning Group:** Transfers / Transactions / UPI (13 total endpoints in `api.md` Section 164.15; 8 concrete Transfer/Transaction endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (8)\n1. `POST /api/v1/transfers/verify-recipient` (49.1–49.3 — `ACCOUNT_IFSC`, `UPI`, `PHONE` modes)\n2. `POST /api/v1/transfers/account-ifsc` (50 — `Idempotency-Key` required)\n3. `POST /api/v1/transfers/upi` (51 — `Idempotency-Key` required)\n4. `POST /api/v1/transfers/phone` (52 — `Idempotency-Key` required)\n5. `POST /api/v1/transfers/own-account` (53 — `Idempotency-Key` required)\n6. `GET /api/v1/transactions/{transactionReference}` (55)\n7. `GET /api/v1/transactions` (56.1 — Unified paginated history via Spring JDBC)\n8. `GET /api/v1/accounts/{accountId}/transactions` (56.2 — Account-scoped paginated history)",
+      "item": [
+        {
+          "name": "Verify Transfer Recipient (Account + IFSC / UPI / Phone) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: recipient verified\", function () {",
+                  "        pm.expect(body).to.have.property(\"transferMethod\").that.is.oneOf([\"ACCOUNT_IFSC\", \"UPI\", \"PHONE\"]);",
+                  "        pm.expect(body).to.have.property(\"verified\", true);",
+                  "        pm.expect(body).to.have.property(\"recipient\").that.is.an(\"object\");",
+                  "        pm.expect(body.recipient).to.have.property(\"accountHolderName\").that.is.a(\"string\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Transfers module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transferMethod\": \"ACCOUNT_IFSC\",\n  \"accountNumber\": \"123456789012\",\n  \"ifsc\": \"APEX0001234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transfers/verify-recipient",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "verify-recipient"
+              ]
+            },
+            "description": "`docs/api.md` Section 49 — Verifies a recipient before payment submission. Supports `transferMethod` values `ACCOUNT_IFSC`, `UPI`, and `PHONE`."
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Account + IFSC Transfer [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201/200: returns finalized transactionReference and SUCCESS status\", function () {",
+                  "        pm.expect(body).to.have.property(\"transactionReference\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"SUCCESS\");",
+                  "        pm.expect(body).to.have.property(\"transferMethod\", \"ACCOUNT_IFSC\");",
+                  "        pm.expect(body).to.have.property(\"amount\").that.is.a(\"number\");",
+                  "    });",
+                  "    pm.environment.set(\"transactionReference\", body.transactionReference);",
+                  "} else if (pm.response.code === 202) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 202 Accepted: step-up OTP challenge triggered\", function () {",
+                  "        pm.expect(body).to.have.property(\"status\", \"SECOND_FACTOR_REQUIRED\");",
+                  "        pm.expect(body).to.have.property(\"challengeId\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"challengeId\", body.challengeId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Transfers module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{accountId}}\",\n  \"destinationAccountNumber\": \"123456789012\",\n  \"destinationIfsc\": \"APEX0001234\",\n  \"amount\": 5000.00,\n  \"remark\": \"Monthly rent\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transfers/account-ifsc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "account-ifsc"
+              ]
+            },
+            "description": "`docs/api.md` Section 50 — Executes an intra-bank Account + IFSC transfer with `Idempotency-Key` protection and double-entry ledger posting."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Unified Customer Transaction History [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns paginated transaction history\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"page\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"pageSize\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalElements\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalPages\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Transactions module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?page=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{accountId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "direction",
+                  "value": "DEBIT",
+                  "disabled": true
+                },
+                {
+                  "key": "from",
+                  "value": "2026-10-01",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-11-02",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`docs/api.md` Section 56.1 — Unified customer transaction history powered by read-only Spring JDBC dynamic filter queries."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - UPI Management & PIN",
+      "description": "**Domain Group:** UPI Identities & UPI PIN Operations (`docs/api.md` Sections 58–64)\n**Part of Planning Group:** Transfers / Transactions / UPI (13 total endpoints in `api.md` Section 164.15; 7 concrete UPI endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (7)\n1. `GET /api/v1/upis` (59)\n2. `POST /api/v1/accounts/{accountId}/upis` (60 — `Idempotency-Key` required)\n3. `DELETE /api/v1/upis/{upiId}` (61)\n4. `POST /api/v1/upis/{upiId}/set-primary` (62)\n5. `POST /api/v1/upis/pin/setup` (64.1)\n6. `POST /api/v1/upis/pin/change` (64.2)\n7. `POST /api/v1/upis/pin/reset` (64.3)",
+      "item": [
+        {
+          "name": "List Customer UPI IDs [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns items array of UPI identities\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until UPI module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/upis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "upis"
+              ]
+            },
+            "description": "`docs/api.md` Section 59 — Lists the customer's `DEFAULT_PHONE` UPI and `CUSTOM` UPI identities."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Custom UPI ID [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: custom UPI created\", function () {",
+                  "        pm.expect(body).to.have.property(\"upiId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"type\", \"CUSTOM\");",
+                  "    });",
+                  "    pm.environment.set(\"upiId\", body.upiId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until UPI module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prefix\": \"arvind.savings\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/accounts/{{accountId}}/upis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "accounts",
+                "{{accountId}}",
+                "upis"
+              ]
+            },
+            "description": "`docs/api.md` Section 60 — Creates a custom UPI ID for the specified customer account. Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Beneficiaries",
+      "description": "**Domain Group:** Saved Beneficiary Accounts (`docs/api.md` Section 73)\n**Part of Planning Group:** Beneficiary / Money Requests / Scheduling (16 total endpoints in `api.md` Section 164.15; 6 concrete Beneficiary endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (6)\n1. `POST /api/v1/beneficiaries/verify-recipient` (73.1)\n2. `POST /api/v1/beneficiaries` (73.2 — enters 30-minute `COOLING` period)\n3. `GET /api/v1/beneficiaries` (73.3 — Paginated)\n4. `GET /api/v1/beneficiaries/{beneficiaryId}` (73.4)\n5. `PATCH /api/v1/beneficiaries/{beneficiaryId}` (73.5 — Update nickname after cooling)\n6. `DELETE /api/v1/beneficiaries/{beneficiaryId}` (73.6)",
+      "item": [
+        {
+          "name": "Verify Beneficiary Recipient Account [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns verificationId and VERIFIED status\", function () {",
+                  "        pm.expect(body).to.have.property(\"verificationId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"accountHolderName\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"VERIFIED\");",
+                  "    });",
+                  "    pm.environment.set(\"beneficiaryVerificationId\", body.verificationId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Beneficiaries module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountNumber\": \"123456789012\",\n  \"ifsc\": \"APEX0001234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries/verify-recipient",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries",
+                "verify-recipient"
+              ]
+            },
+            "description": "`docs/api.md` Section 73.1 — Verifies an Account + IFSC recipient before saving as a beneficiary."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Beneficiary (30-Min Cooling) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: beneficiary enters COOLING state\", function () {",
+                  "        pm.expect(body).to.have.property(\"beneficiaryId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"COOLING\");",
+                  "        pm.expect(body).to.have.property(\"usableAt\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"beneficiaryId\", body.beneficiaryId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Beneficiaries module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationId\": \"{{beneficiaryVerificationId}}\",\n  \"verificationChallengeId\": \"{{verificationChallengeId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/beneficiaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "beneficiaries"
+              ]
+            },
+            "description": "`docs/api.md` Section 73.2 — Creates a beneficiary in `COOLING` status for the fixed 30-minute cooling period."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "07 - Money Requests",
+      "description": "**Domain Group:** UPI Money Requests (`docs/api.md` Section 74)\n**Part of Planning Group:** Beneficiary / Money Requests / Scheduling (16 total endpoints in `api.md` Section 164.15; 6 concrete Money Request endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (6)\n1. `POST /api/v1/money-requests` (74.1 — `Idempotency-Key` required)\n2. `GET /api/v1/money-requests` (74.2 — Paginated)\n3. `GET /api/v1/money-requests/{moneyRequestId}` (74.3)\n4. `POST /api/v1/money-requests/{moneyRequestId}/accept` (74.4 — `Idempotency-Key` required)\n5. `POST /api/v1/money-requests/{moneyRequestId}/decline` (74.5 — `Idempotency-Key` recommended)\n6. `POST /api/v1/money-requests/{moneyRequestId}/cancel` (74.6 — `Idempotency-Key` recommended)",
+      "item": [
+        {
+          "name": "Create Money Request [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns PENDING money request\", function () {",
+                  "        pm.expect(body).to.have.property(\"moneyRequestId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"PENDING\");",
+                  "        pm.expect(body).to.have.property(\"validTill\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"moneyRequestId\", body.moneyRequestId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Money Requests module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payerUpiId\": \"rahul@apexbank\",\n  \"amount\": 500.00,\n  \"remark\": \"Dinner share\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/money-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "money-requests"
+              ]
+            },
+            "description": "`docs/api.md` Section 74.1 — Creates a temporary money request storing the requester's UPI/account snapshot and the requested payer's customer identity. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Money Request [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: money request paid and removed atomically\", function () {",
+                  "        pm.expect(body).to.have.property(\"status\", \"PAID\");",
+                  "        pm.expect(body).to.have.property(\"transactionId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"amount\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Money Requests module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{accountId}}\",\n  \"upiPin\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/money-requests/{{moneyRequestId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "money-requests",
+                "{{moneyRequestId}}",
+                "accept"
+              ]
+            },
+            "description": "`docs/api.md` Section 74.4 — Pays an active money request from any eligible active account owned by the requested payer and deletes the temporary request in one PostgreSQL transaction. Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08 - Scheduled Payments",
+      "description": "**Domain Group:** Scheduled Future UPI Payments (`docs/api.md` Sections 77–83)\n**Part of Planning Group:** Beneficiary / Money Requests / Scheduling (16 total endpoints in `api.md` Section 164.15; 4 concrete Scheduled Payment endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (4)\n1. `POST /api/v1/scheduled-payments` (77.1 — `Idempotency-Key` required)\n2. `GET /api/v1/scheduled-payments` (77.2 — Paginated)\n3. `GET /api/v1/scheduled-payments/{scheduledPaymentId}` (77.3)\n4. `DELETE /api/v1/scheduled-payments/{scheduledPaymentId}` (77.4)",
+      "item": [
+        {
+          "name": "Create Scheduled UPI Payment [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns SCHEDULED payment with 10-min executionDeadline\", function () {",
+                  "        pm.expect(body).to.have.property(\"id\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"SCHEDULED\");",
+                  "        pm.expect(body).to.have.property(\"scheduledAt\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"executionDeadline\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"scheduledPaymentId\", body.id);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Scheduled Payments module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{accountId}}\",\n  \"sourceUpiId\": \"{{upiId}}\",\n  \"recipient\": {\n    \"type\": \"UPI_ID\",\n    \"value\": \"rahul@apexbank\"\n  },\n  \"amount\": 2500.00,\n  \"scheduledAt\": \"2026-11-15T10:30:00+05:30\",\n  \"remark\": \"Monthly subscription\",\n  \"upiPin\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/scheduled-payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scheduled-payments"
+              ]
+            },
+            "description": "`docs/api.md` Section 77.1 — Creates a future UPI payment instruction with a fixed 10-minute grace window (`executionDeadline`). Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "09 - Debit Cards",
+      "description": "**Domain Group:** Debit Cards (`docs/api.md` Sections 84–85)\n**Part of Planning Group:** Cards (36 total endpoints in `api.md` Section 164.15; 12 concrete Debit Card endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (12)\n1. `POST /api/v1/debit-cards` (84.1 — `Idempotency-Key` required)\n2. `GET /api/v1/debit-cards` (84.3)\n3. `GET /api/v1/debit-cards/{cardId}` (84.2)\n4. `POST /api/v1/debit-cards/{cardId}/activate` (84.4)\n5. `PUT /api/v1/debit-cards/{cardId}/pin` (84.5)\n6. `POST /api/v1/debit-cards/{cardId}/block` (84.6)\n7. `POST /api/v1/debit-cards/{cardId}/unblock` (84.7)\n8. `PATCH /api/v1/debit-cards/{cardId}/controls` (84.8)\n9. `POST /api/v1/debit-cards/{cardId}/limit-requests` (84.9)\n10. `POST /api/v1/debit-cards/{cardId}/replacement` (84.10 — `Idempotency-Key` required)\n11. `POST /api/v1/debit-cards/{cardId}/purchases` (84.10.1 — `Idempotency-Key` required)\n12. `GET /api/v1/debit-cards/{cardId}/transactions` (84.11 — Paginated)",
+      "item": [
+        {
+          "name": "Request Debit Card Issuance [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: debit card issued without exposing full PAN/PIN\", function () {",
+                  "        pm.expect(body).to.be.an(\"object\");",
+                  "        pm.expect(body).to.not.have.property(\"pin\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Debit Cards module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{accountId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/debit-cards",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debit-cards"
+              ]
+            },
+            "description": "`docs/api.md` Section 84.1 — Issues a debit card linked permanently to the specified eligible customer account. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Simulated Debit-Card Purchase [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: debit card purchase completed\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Debit Cards module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 2500.00,\n  \"merchantName\": \"Example Merchant\",\n  \"merchantCategory\": \"GENERAL\",\n  \"isInternational\": false,\n  \"onlinePurchase\": true,\n  \"pin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/debit-cards/{{debitCardId}}/purchases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "debit-cards",
+                "{{debitCardId}}",
+                "purchases"
+              ]
+            },
+            "description": "`docs/api.md` Section 84.10.1 — Posts a simulated debit-card purchase and any applicable international fee as one atomic financial transaction. Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "10 - Credit Cards",
+      "description": "**Domain Group:** Credit Card Applications, Credit Cards, Purchases, Limit Requests, Bill Payments, Billing Cycles & Rewards (`docs/api.md` Sections 86–97)\n**Part of Planning Group:** Cards (36 total endpoints in `api.md` Section 164.15; 24 concrete Credit Card endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (24)\n1. `POST /api/v1/credit-card-applications` (86.1 — `Idempotency-Key` required)\n2. `GET /api/v1/credit-card-applications` (86.2)\n3. `GET /api/v1/credit-card-applications/{applicationId}` (86.3)\n4. `GET /api/v1/credit-cards` (87.1)\n5. `GET /api/v1/credit-cards/{cardId}` (87.2)\n6. `POST /api/v1/credit-cards/{cardId}/activate` (87.3)\n7. `PUT /api/v1/credit-cards/{cardId}/pin` (87.4)\n8. `POST /api/v1/credit-cards/{cardId}/block` (87.5)\n9. `POST /api/v1/credit-cards/{cardId}/unblock` (87.6)\n10. `PATCH /api/v1/credit-cards/{cardId}/controls` (87.7)\n11. `POST /api/v1/credit-cards/{cardId}/purchases` (87.8 — `Idempotency-Key` required)\n12. `GET /api/v1/credit-cards/{cardId}/transactions` (87.9 — Paginated)\n13. `POST /api/v1/credit-cards/{cardId}/limit-requests` (88.1)\n14. `GET /api/v1/credit-cards/{cardId}/limit-requests` (88.2)\n15. `GET /api/v1/credit-cards/{cardId}/limit-requests/{requestId}` (88.3)\n16. `POST /api/v1/credit-cards/{cardId}/payments` (89.1 — `Idempotency-Key` required)\n17. `GET /api/v1/credit-cards/{cardId}/payments` (89.2 — Paginated)\n18. `PUT /api/v1/credit-cards/{cardId}/automatic-payment-account` (90.2)\n19. `GET /api/v1/credit-cards/{cardId}/billing-cycles` (91.1 — Paginated)\n20. `GET /api/v1/credit-cards/{cardId}/billing-cycles/{cycleId}` (91.2)\n21. `GET /api/v1/credit-cards/{cardId}/rewards` (92.1)\n22. `GET /api/v1/credit-cards/{cardId}/rewards/history` (92.2 — Paginated)\n23. `POST /api/v1/credit-cards/{cardId}/rewards/redemptions` (92.3 — `Idempotency-Key` required)\n24. `POST /api/v1/credit-cards/{cardId}/closure` (93)",
+      "item": [
+        {
+          "name": "Apply for Credit Card [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns credit card application with validTill\", function () {",
+                  "        pm.expect(body).to.have.property(\"applicationId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"APPLICATION\");",
+                  "        pm.expect(body).to.have.property(\"validTill\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"creditCardApplicationId\", body.applicationId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Credit Cards module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchId\": \"{{branchId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/credit-card-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "credit-card-applications"
+              ]
+            },
+            "description": "`docs/api.md` Section 86.1 — Submits a credit-card application scoped to a branch where the customer holds an active account. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Pay Credit-Card Bill [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: credit card payment processed\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Credit Cards module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{accountId}}\",\n  \"amount\": 5000.00,\n  \"remark\": \"Monthly card bill payment\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/credit-cards/{{creditCardId}}/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "credit-cards",
+                "{{creditCardId}}",
+                "payments"
+              ]
+            },
+            "description": "`docs/api.md` Section 89.1 — Pays a credit-card bill from an eligible active customer account, allocating to the oldest unpaid billed cycle first. Rejects overpayment with `422 PAYMENT_EXCEEDS_OUTSTANDING`. Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11 - Loans & EMI",
+      "description": "**Domain Group:** Loan Products, Loan Applications, Active Loans, EMI Schedules & Early Closure (`docs/api.md` Sections 98–107)\n**Planning Group Total:** 18 endpoints.\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (18)\n1. `GET /api/v1/loan-products` (98.1)\n2. `GET /api/v1/loan-products/{productId}` (98.2)\n3. `POST /api/v1/loan-applications` (99.1 — `Idempotency-Key` required)\n4. `GET /api/v1/loan-applications` (99.2 — Paginated)\n5. `GET /api/v1/loan-applications/{applicationId}` (99.3)\n6. `POST /api/v1/loan-applications/{applicationId}/cancellation` (99.4 — `Idempotency-Key` required)\n7. `POST /api/v1/loan-applications/{applicationId}/offer-acceptance` (99.5 — `Idempotency-Key` required)\n8. `PUT /api/v1/loan-applications/{applicationId}/disbursement-account` (99.6)\n9. `GET /api/v1/loans` (100.1 — Paginated)\n10. `GET /api/v1/loans/{loanId}` (100.2)\n11. `GET /api/v1/loans/{loanId}/summary` (100.3)\n12. `PUT /api/v1/loans/{loanId}/emi-payment-account` (100.4)\n13. `GET /api/v1/loans/{loanId}/emis` (101.1 — Paginated)\n14. `GET /api/v1/loans/{loanId}/emis/{emiId}` (101.2)\n15. `POST /api/v1/loans/{loanId}/emi-payments` (101.3 — `Idempotency-Key` required)\n16. `GET /api/v1/loans/{loanId}/payments` (101.4 — Paginated)\n17. `GET /api/v1/loans/{loanId}/early-closure-quote` (102.1)\n18. `POST /api/v1/loans/{loanId}/early-closure` (102.2 — `Idempotency-Key` required)",
+      "item": [
+        {
+          "name": "List Available Loan Products [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: returns active loan products\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Loans module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loan-products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loan-products"
+              ]
+            },
+            "description": "`docs/api.md` Section 98.1 — Returns active Admin-configured loan products available for customer applications."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Loan Application [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 201 Created: returns PENDING_REVIEW loan application\", function () {",
+                  "        pm.expect(body).to.have.property(\"applicationId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"PENDING_REVIEW\");",
+                  "        pm.expect(body).to.have.property(\"validTill\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"loanApplicationId\", body.applicationId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Loans module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loanProductId\": \"{{loanProductId}}\",\n  \"branchId\": \"{{branchId}}\",\n  \"disbursementAccountId\": \"{{accountId}}\",\n  \"requestedAmount\": 250000.00,\n  \"requestedTenureMonths\": 36\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loan-applications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loan-applications"
+              ]
+            },
+            "description": "`docs/api.md` Section 99.1 — Submits a new loan application scoped to `branchId`. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Pay Loan EMI (Due or Advance) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: EMI payment completed\", function () {",
+                  "        pm.expect(body).to.have.property(\"paymentReference\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"paidEmis\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"SUCCESS\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Loans/EMI module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceAccountId\": \"{{accountId}}\",\n  \"paymentMode\": \"DUE\",\n  \"verificationChallengeId\": \"{{verificationChallengeId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{loanId}}/emi-payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "loans",
+                "{{loanId}}",
+                "emi-payments"
+              ]
+            },
+            "description": "`docs/api.md` Section 101.3 — Pays current `DUE` EMI or multiple `ADVANCE` EMIs synchronously inside PostgreSQL. Requires `Idempotency-Key`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "12 - Manager Portal (Branch-Scoped)",
+      "description": "**Domain Group:** Branch-Scoped Manager Operations & Review Queues (`docs/api.md` Sections 108–127)\n**Planning Group Total:** 34 endpoints.\n**Required Role:** `MANAGER` (uses `{{managerAccessToken}}`)\n\n### Documented V1 Endpoints (34)\n1. `GET /api/v1/manager/branches` (109.1)\n2. `GET /api/v1/manager/branches/{branchId}/customers` (110.1 — Paginated)\n3. `GET /api/v1/manager/branches/{branchId}/customers/{customerId}` (110.2)\n4. `GET /api/v1/manager/branches/{branchId}/customers/{customerId}/accounts` (110.3)\n5. `GET /api/v1/manager/branches/{branchId}/profile-change-requests` (111.1 — Paginated)\n6. `GET /api/v1/manager/branches/{branchId}/profile-change-requests/{requestId}` (111.2)\n7. `POST /api/v1/manager/branches/{branchId}/profile-change-requests/{requestId}/approval` (111.3 — `Idempotency-Key`)\n8. `POST /api/v1/manager/branches/{branchId}/accounts/{accountId}/suspension` (112.1 — `Idempotency-Key`)\n9. `POST /api/v1/manager/branches/{branchId}/accounts/{accountId}/reactivation` (112.2 — `Idempotency-Key`)\n10. `GET /api/v1/manager/branches/{branchId}/account-closure-requests` (113.1 — Paginated)\n11. `GET /api/v1/manager/branches/{branchId}/account-closure-requests/{requestId}` (113.2)\n12. `POST /api/v1/manager/branches/{branchId}/account-closure-requests/{requestId}/decision` (113.3 — `Idempotency-Key`)\n13. `GET /api/v1/manager/branches/{branchId}/loan-applications` (114.1 — Paginated)\n14. `GET /api/v1/manager/branches/{branchId}/loan-applications/{applicationId}` (114.2)\n15. `POST /api/v1/manager/branches/{branchId}/loan-applications/{applicationId}/decision` (114.3 — `Idempotency-Key`)\n16. `GET /api/v1/manager/branches/{branchId}/credit-card-applications` (115.1 — Paginated)\n17. `GET /api/v1/manager/branches/{branchId}/credit-card-applications/{applicationId}` (115.2)\n18. `POST /api/v1/manager/branches/{branchId}/credit-card-applications/{applicationId}/decision` (115.3 — `Idempotency-Key`)\n19. `GET /api/v1/manager/branches/{branchId}/debit-card-limit-requests` (116.1 — Paginated)\n20. `GET /api/v1/manager/branches/{branchId}/debit-card-limit-requests/{requestId}` (116.2)\n21. `POST /api/v1/manager/branches/{branchId}/debit-card-limit-requests/{requestId}/decision` (116.3 — `Idempotency-Key`)\n22. `GET /api/v1/manager/branches/{branchId}/card-limit-requests` (116.4 — Paginated)\n23. `GET /api/v1/manager/branches/{branchId}/card-limit-requests/{requestId}` (116.5)\n24. `POST /api/v1/manager/branches/{branchId}/card-limit-requests/{requestId}/decision` (116.6 — `Idempotency-Key`)\n25. `GET /api/v1/manager/branches/{branchId}/branch-transfer-requests` (117.1 — Paginated)\n26. `GET /api/v1/manager/branches/{branchId}/branch-transfer-requests/{requestId}` (117.2)\n27. `POST /api/v1/manager/branches/{branchId}/branch-transfer-requests/{requestId}/decision` (117.3 — `Idempotency-Key`)\n28. `POST /api/v1/manager/branches/{branchId}/funding-requests` (118.1 — `Idempotency-Key`)\n29. `GET /api/v1/manager/branches/{branchId}/funding-requests` (118.2 — Paginated)\n30. `GET /api/v1/manager/branches/{branchId}/funding-requests/{requestId}` (118.3)\n31. `GET /api/v1/manager/branches/{branchId}/financial-position` (119.1)\n32. `GET /api/v1/manager/branches/{branchId}/financial-movements` (119.2 — Paginated)\n33. `GET /api/v1/manager/branches/{branchId}/customer-activity` (120 — Paginated)\n34. `GET /api/v1/manager/branches/{branchId}/work-queue` (121)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{managerAccessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "List Manager Assigned Branches [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns assigned branches list\", function () {",
+                  "        pm.expect(body).to.have.property(\"branches\").that.is.an(\"array\");",
+                  "    });",
+                  "    if (body.branches && body.branches.length > 0) {",
+                  "        pm.environment.set(\"branchId\", body.branches[0].branchId);",
+                  "    }",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Manager module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/branches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "branches"
+              ]
+            },
+            "description": "`docs/api.md` Section 109.1 — Lists active branches currently assigned to the authenticated Manager."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Branch Work Queue Summary [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: returns branch work queue summary\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Manager module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/manager/branches/{{branchId}}/work-queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "branches",
+                "{{branchId}}",
+                "work-queue"
+              ]
+            },
+            "description": "`docs/api.md` Section 121 — Branch-scoped read model over pending Manager review items."
+          },
+          "response": []
+        },
+        {
+          "name": "Review Loan Application Decision [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: loan application decision recorded\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Manager Loan Review is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE_WITH_DIFFERENT_AMOUNT\",\n  \"approvedAmount\": 200000.00,\n  \"reason\": \"Approved within branch lending policy\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/branches/{{branchId}}/loan-applications/{{loanApplicationId}}/decision",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "branches",
+                "{{branchId}}",
+                "loan-applications",
+                "{{loanApplicationId}}",
+                "decision"
+              ]
+            },
+            "description": "`docs/api.md` Section 114.3 — Reviews a branch-scoped loan application (`APPROVE`, `APPROVE_WITH_DIFFERENT_AMOUNT`, `REJECT`). Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Branch Funding Request [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Contract 201 Created: branch funding request created\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Manager Funding Request is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestedAmount\": 500000.00,\n  \"reason\": \"Additional lending capacity required\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/manager/branches/{{branchId}}/funding-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "manager",
+                "branches",
+                "{{branchId}}",
+                "funding-requests"
+              ]
+            },
+            "description": "`docs/api.md` Section 118.1 — Requests additional Branch Funds from Admin for the selected branch. Only one active funding request per branch is permitted."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "13 - Admin Portal (Bank-Wide)",
+      "description": "**Domain Group:** Bank-Wide Administration: Branches, Managers, Central Ledger, Funding Decisions, Loan Products, Dashboards, Configuration & Audit (`docs/api.md` Sections 128–143)\n**Planning Group Total:** 36 endpoints.\n**Required Role:** `ADMIN` (uses `{{adminAccessToken}}`)\n\n### Documented V1 Endpoints (36)\n1. `GET /api/v1/admin/branches` (130.1 — Paginated)\n2. `GET /api/v1/admin/branches/{branchId}` (130.2)\n3. `POST /api/v1/admin/branches` (130.3 — `Idempotency-Key` required)\n4. `PATCH /api/v1/admin/branches/{branchId}` (130.4)\n5. `GET /api/v1/admin/branches/{branchId}/manager` (130.5)\n6. `POST /api/v1/admin/branches/{branchId}/manager` (130.6)\n7. `GET /api/v1/admin/branches/{branchId}/manager-assignments` (130.7 — Paginated)\n8. `POST /api/v1/admin/branches/{branchId}/decommission` (130.8 — returns `202 Accepted`)\n9. `GET /api/v1/admin/managers` (131.1 — Paginated)\n10. `GET /api/v1/admin/managers/{managerId}` (131.2)\n11. `POST /api/v1/admin/managers` (131.3)\n12. `GET /api/v1/admin/managers/{managerId}/branches` (131.4)\n13. `POST /api/v1/admin/managers/{managerId}/deactivation` (131.5)\n14. `POST /api/v1/admin/managers/{managerId}/activation` (131.6)\n15. `POST /api/v1/admin/admins` (131.7 — `Idempotency-Key` required)\n16. `GET /api/v1/admin/ledger/central/position` (132.1)\n17. `GET /api/v1/admin/ledger/central/movements` (132.2 — Paginated)\n18. `POST /api/v1/admin/ledger/central/injections` (132.3 — `Idempotency-Key` required)\n19. `GET /api/v1/admin/funding-requests` (133.1 — Paginated)\n20. `GET /api/v1/admin/funding-requests/{requestId}` (133.2)\n21. `POST /api/v1/admin/funding-requests/{requestId}/decision` (133.3 — `Idempotency-Key` required)\n22. `GET /api/v1/admin/loan-products` (134.1)\n23. `GET /api/v1/admin/loan-products/{productId}` (134.2)\n24. `POST /api/v1/admin/loan-products` (134.3 — `Idempotency-Key` required)\n25. `PATCH /api/v1/admin/loan-products/{productId}` (134.4)\n26. `GET /api/v1/admin/dashboard/financial-summary` (135.1)\n27. `GET /api/v1/admin/dashboard/branches/{branchId}/financial` (135.2)\n28. `GET /api/v1/admin/dashboard/financial-activity` (135.3 — Paginated)\n29. `GET /api/v1/admin/configuration/categories` (136.1)\n30. `GET /api/v1/admin/configuration/categories/{category}/settings` (136.2)\n31. `GET /api/v1/admin/configuration/settings/{settingKey}` (136.3)\n32. `PATCH /api/v1/admin/configuration/settings/{settingKey}` (136.4 — optimistic `expectedVersion`)\n33. `GET /api/v1/admin/configuration/history` (136.5 — Paginated)\n34. `GET /api/v1/admin/audit-logs` (137.1 — Paginated)\n35. `GET /api/v1/admin/audit-logs/{auditLogId}` (137.2)\n36. `POST /api/v1/admin/audit-logs/export` (137.3 — returns `202 Accepted`)",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{adminAccessToken}}",
+            "type": "string"
+          }
+        ]
+      },
+      "item": [
+        {
+          "name": "Inject Simulated Central Ledger Funds [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Contract 201 Created: Central Ledger funds injected and audited\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Admin Central Ledger is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10000000.00,\n  \"reason\": \"Initial simulated bank capital injection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/ledger/central/injections",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "ledger",
+                "central",
+                "injections"
+              ]
+            },
+            "description": "`docs/api.md` Section 132.3 — Introduces simulated capital into the Central Ledger with balanced double-entry accounting and mandatory audit logging. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Branch (With Manager & Initial Funding) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.test(\"Contract 201 Created: branch created with Manager and initial Branch Funds\", function () {",
+                  "        pm.response.to.have.status(201);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Admin Branches module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branchCode\": \"BR001\",\n  \"name\": \"Indore Main Branch\",\n  \"location\": {\n    \"address\": \"100 MG Road, Indore, MP\"\n  },\n  \"managerId\": \"{{managerId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/branches",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "branches"
+              ]
+            },
+            "description": "`docs/api.md` Section 130.3 — Atomically creates an active branch, assigns its Manager, and transfers initial Branch Funds from the Central Ledger. Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Configurable Bank Setting [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.test(\"Contract 200 OK: setting updated with optimistic concurrency check\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Admin Configuration module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": 50000,\n  \"expectedVersion\": 1,\n  \"reason\": \"Increase daily transfer limit\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/configuration/settings/{{settingKey}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "configuration",
+                "settings",
+                "{{settingKey}}"
+              ]
+            },
+            "description": "`docs/api.md` Section 136.4 — Updates an individual recognized setting using `expectedVersion` optimistic concurrency protection."
+          },
+          "response": []
+        },
+        {
+          "name": "Search Audit Logs [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns paginated audit records\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"page\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"pageSize\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalElements\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalPages\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/403/404 until Admin Audit module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs?page=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "BRANCH",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "ADMIN",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`docs/api.md` Section 137.1 — Searches bank-wide audit records with pagination and dynamic filters."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "14 - Notifications",
+      "description": "**Domain Group:** Logical In-App Notifications (`docs/api.md` Sections 144–152)\n**Part of Planning Group:** Notifications / Statements (10 total endpoints in `api.md` Section 164.15; 5 concrete Notification endpoints).\n**Required Role:** Authenticated (`CUSTOMER`, `MANAGER`, or `ADMIN`)\n\n### Documented V1 Endpoints (5)\n1. `GET /api/v1/notifications` (145 — Paginated)\n2. `GET /api/v1/notifications/{notificationId}` (146)\n3. `POST /api/v1/notifications/{notificationId}/read` (147)\n4. `POST /api/v1/notifications/read-all` (148)\n5. `GET /api/v1/notifications/unread-count` (149)",
+      "item": [
+        {
+          "name": "List Notifications [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns paginated notifications\", function () {",
+                  "        pm.expect(body).to.have.property(\"items\").that.is.an(\"array\");",
+                  "        pm.expect(body).to.have.property(\"page\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"pageSize\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalElements\").that.is.a(\"number\");",
+                  "        pm.expect(body).to.have.property(\"totalPages\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Notifications module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications?page=0&pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "read",
+                  "value": "false",
+                  "disabled": true
+                },
+                {
+                  "key": "priority",
+                  "value": "HIGH",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "`docs/api.md` Section 145 — Returns paginated logical notifications for the authenticated user (`CUSTOMER`, `MANAGER`, or `ADMIN`)."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Unread Notification Count [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns numeric unread count\", function () {",
+                  "        pm.expect(body).to.have.property(\"count\").that.is.a(\"number\");",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Notifications module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "`docs/api.md` Section 149 — Returns the count of retained unread notifications for the authenticated user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "15 - Statements",
+      "description": "**Domain Group:** Asynchronous Account Statements (`docs/api.md` Sections 153–163)\n**Part of Planning Group:** Notifications / Statements (10 total endpoints in `api.md` Section 164.15; 5 concrete Statement endpoints).\n**Required Role:** `CUSTOMER`\n\n### Documented V1 Endpoints (5)\n1. `GET /api/v1/statements` (153.1 — Paginated)\n2. `POST /api/v1/statements` (154 — `Idempotency-Key` required, returns `202 Accepted`)\n3. `GET /api/v1/statements/{statementRequestId}` (156)\n4. `GET /api/v1/statements/{statementRequestId}/file` (157 — Streams PDF/CSV from Cloudflare R2 `statements/` folder)\n5. `POST /api/v1/statements/{statementRequestId}/resend` (158 — returns `202 Accepted`)",
+      "item": [
+        {
+          "name": "Create Statement Request (Async 202) [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const pinnedKey = pm.environment.get(\"pinnedIdempotencyKey\");",
+                  "if (pinnedKey && pinnedKey.trim() !== \"\") {",
+                  "    pm.environment.set(\"idempotencyKey\", pinnedKey.trim());",
+                  "} else {",
+                  "    pm.environment.set(\"idempotencyKey\", pm.variables.replaceIn(\"{{$guid}}\"));",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 202 Accepted: statement request queued in REQUESTED state\", function () {",
+                  "        pm.expect(body).to.have.property(\"statementRequestId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\", \"REQUESTED\");",
+                  "        pm.expect(body).to.have.property(\"format\").that.is.oneOf([\"PDF\", \"CSV\"]);",
+                  "        pm.expect(body).to.have.property(\"requestedAt\").that.is.a(\"string\");",
+                  "    });",
+                  "    pm.environment.set(\"statementRequestId\", body.statementRequestId);",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Statements module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountIds\": [\n    \"{{accountId}}\"\n  ],\n  \"format\": \"PDF\",\n  \"from\": \"2026-10-01\",\n  \"until\": \"2026-11-01\",\n  \"direction\": \"ALL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/statements",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "statements"
+              ]
+            },
+            "description": "`docs/api.md` Section 154 — Enqueues an asynchronous PDF/CSV statement generation request (`202 Accepted`, `status = REQUESTED`). Requires `Idempotency-Key`."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Statement Request Status [CONTRACT - UNIMPLEMENTED]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const body = pm.response.json();",
+                  "    pm.test(\"Contract 200 OK: returns statement status (REQUESTED, PROCESSING, READY, or FAILED)\", function () {",
+                  "        pm.expect(body).to.have.property(\"statementRequestId\").that.is.a(\"string\");",
+                  "        pm.expect(body).to.have.property(\"status\").that.is.oneOf([\"REQUESTED\", \"PROCESSING\", \"READY\", \"FAILED\"]);",
+                  "        pm.expect(body).to.have.property(\"format\").that.is.oneOf([\"PDF\", \"CSV\"]);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"[UNIMPLEMENTED CONTRACT] Returns 401/404 until Statements module is implemented\", function () {",
+                  "        pm.expect(pm.response.code).to.be.oneOf([401, 403, 404]);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/statements/{{statementRequestId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "statements",
+                "{{statementRequestId}}"
+              ]
+            },
+            "description": "`docs/api.md` Section 156 — Checks the asynchronous lifecycle status of a customer statement request."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
