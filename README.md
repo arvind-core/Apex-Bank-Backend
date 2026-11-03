@@ -1,15 +1,15 @@
 # Apex Bank — Backend
 
-Backend application for **Apex Bank**, a simulated banking platform modeling customer accounts, intra-bank transfers, UPI, beneficiaries, money requests, scheduled payments, debit and credit cards, loans and EMIs, branch operations, manager review queues, double-entry accounting, and bank-wide administration.
+Backend application for **Apex Bank**, a simulated banking platform modeling customer accounts, intra-account transfers, UPI, beneficiaries, money requests, scheduled payments, debit and credit cards, loans and EMIs, branch operations, manager review queues, double-entry accounting, and bank-wide administration.
 
-> **Simulation Notice:** This system is a learning and engineering portfolio project. It does not connect to real banking rails, card networks, or real money.
+> **Simulation Notice:** This system is a learning and engineering portfolio project. It does not connect to real banking infrastructure, card networks, or real money.
 
 ## Technology Stack
 
 - **Language & Runtime:** Java 25
-- **Framework:** Spring Boot 4.1.1
+- **Framework:** Spring Boot 4.x
 - **Architecture:** Feature-first modular monolith (`com.apexbank`)
-- **Primary Database:** PostgreSQL (Neon PostgreSQL in cloud deployment)
+- **Primary Database:** PostgreSQL (Neon PostgreSQL)
 - **Persistence:** Hybrid Spring Data JPA (transactional writes, state transitions, concurrency locking) + Spring JDBC (dynamic multi-filter reads, cross-table read models, statement streaming)
 - **Schema Migrations:** Flyway
 - **Mapping & Boilerplate:** MapStruct + Lombok
