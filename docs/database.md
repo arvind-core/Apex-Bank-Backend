@@ -177,17 +177,26 @@ The phone number is used only for the customer's default UPI addressing requirem
 
 ## 3.3 `employee`
 
-Purpose: employee-specific identity.
+Purpose: employee-specific identity for Managers and Admins.
 
 Key fields:
 
-- `id`
-- `user_account_id` — unique FK
-- `employee_number` — unique
-- employment/status fields
-- timestamps
+- `id` — primary key (`UUID`)
+- `user_account_id` — unique FK to `user_account(id)`
+- `employee_number` — unique immutable employee identifier
+- `full_name` — required employee full name
+- `email` — required employee communication email, normalized consistently and unique case-insensitively
+- `status` — `ACTIVE`, `DEACTIVATION_SCHEDULED`, `INACTIVE`
+- `deactivation_scheduled_at` — nullable timestamp for scheduled employee deactivation deadline
+- `created_at`
+- `updated_at`
 
-Managers and Admins do not have a phone-number field.
+Constraints:
+
+- One employee maps to exactly one `user_account` (`MANAGER` or `ADMIN`).
+- `employee_number` is globally unique.
+- `email` is unique case-insensitively using a unique index on `LOWER(email)`.
+- Managers and Admins do not have a phone-number field.
 
 ---
 
@@ -1240,6 +1249,7 @@ UNIQUE INDEX ON LOWER(customer.email)
 customer.telegram_chat_id              UNIQUE WHERE NOT NULL
 employee.user_account_id              UNIQUE
 employee.employee_number              UNIQUE
+UNIQUE INDEX ON LOWER(employee.email)
 ```
 
 ## Accounts
